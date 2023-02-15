@@ -1,0 +1,145 @@
+# install clip-interrogator
+!pip install clip-interrogator
+
+# Install Diffusers
+!pip install --upgrade diffusers transformers accelerate
+
+from diffusers import StableDiffusionPipeline, StableDiffusionImg2ImgPipeline
+import torch
+import requests
+import numpy as np
+import pandas as pd
+from io import BytesIO
+from PIL import Image, ImageDraw, ImageFont
+from clip_interrogator import Config, Interrogator
+import glob 
+from typing import List, Union, Optional
+import nltk
+nltk.download('punkt')
+
+# User defined Functions
+def image_grid(imgs, rows, cols):
+    w,h = imgs[0].size
+    grid = Image.new('RGB', size=(cols*w, rows*h))
+    for i, img in enumerate(imgs): grid.paste(img, box=(i%cols*w, i//cols*h))
+    return grid
+
+def multiple_rounds_img2img(
+  init_image: Image,
+  prompt: str,  
+  negative_prompt: str,
+  strength_array: List[float],
+  guidance_array: Union[List[float], List[int]],
+  final_images_to_return: Optional[int] = 5,
+  num_rounds: Optional[int] = 4,
+  seed: Optional[int] = 123) -> List:
+
+  # Parameter checking
+  ## init_image
+  assert isinstance(init_image, Image.Image), "init_image must be an Image"
+
+  ## prompt & negative_prompt
+  assert isinstance(prompt, str) and len(prompt) > 0, "Prompt provided must be a comma separated string and cannot be an empty string" 
+  assert isinstance(negative_prompt, str), "Negative Prompt provided must be a comma separated string"
+
+  ## num rounds
+  assert num_rounds > 1, "num_rounds must be greater than 1"
+
+  ## strength_array & guidance array
+  assert len(strength_array) == num_rounds, 'strength_array length must be identical to num_rounds'
+  assert len(guidance_array) == num_rounds, 'guidance_array length must be identical to num_rounds'
+
+  ## final_images_to_return
+  assert final_images_to_return > 0, "final_images_to_return must be greater than 0"
+
+  ## seed
+  assert isinstance(seed, int), "seed must be an integer"
+  
+  # Main Body
+  torch.manual_seed(seed)
+  output_image_array = [init_image]
+
+  for idx in list(range(0, num_rounds - 1)):
+    
+    img2imgpipeline = img2imgpipe(prompt = prompt,
+                          image=output_image_array[idx],
+                          strength=strength_array[idx],
+                          guidance_scale=guidance_array[idx],
+                          num_inference_steps=400,
+                          num_images_per_prompt = 1,
+                          negative_prompt = negative_prompt)
+
+    output_image_array.append( img2imgpipeline.images[0] )
+
+    # For final round of inference
+    torch.manual_seed(seed)
+    img2imgpipeline_final = img2imgpipe(prompt = prompt,
+                            image=output_image_array[-1],
+                            strength=strength_array[-1],
+                            guidance_scale=guidance_array[-1],
+                            num_inference_steps=400,
+                            num_images_per_prompt = final_images_to_return,
+                            negative_prompt = negative_prompt)
+
+    return img2imgpipeline_final.images
+
+
+
+# load the pipeline
+# Model and Device
+model_id = "nitrosocke/mo-di-diffusion"
+clip_model_id = "ViT-L-14/openai"
+device = "cuda"
+
+# text to image pipeline
+txt2imgpipe = StableDiffusionPipeline.from_pretrained(model_id, torch_dtype=torch.float16).to(device)
+
+# image to image pipeline
+img2imgpipe = StableDiffusionImg2ImgPipeline.from_pretrained(model_id, torch_dtype=torch.float16).to(device)
+anythingimg2imgpipe = StableDiffusionImg2ImgPipeline.from_pretrained("Linaqruf/anything-v3.0", revision="diffusers", torch_dtype=torch.float16).to(device)
+
+# CLIP Interrogator
+ci = Interrogator(Config(clip_model_name = clip_model_id))
+
+# Load Data
+filenames = glob.glob("/content/IMG*")
+
+raw_images = [Image.open(i) for i in filenames]
+imgs = [i.convert("RGB") for i in raw_images]
+
+# Use CLIP Interrogator on Image to generate a prompt
+clip_prompt = ci.interrogate_fast(imgs[0])
+
+augmented_prompt = " ".join( nltk.word_tokenize(clip_prompt)[0:10] + nltk.word_tokenize(", cartoon, Pixar, Disney character, 3D render, high quality, smooth render, bright, vibrant, full red, beautiful, animated, high-def, modern disney style") )
+
+# Generate image via text to image
+txt2imgpipeline = txt2imgpipe(prompt= augmented_prompt,
+                       guidance_scale=14.5,
+                       num_inference_steps=400,
+                       num_images_per_prompt = 3,
+                       negative_prompt = "disfigured, ugly, blurry, grumpy, grey, dark, big eyes, person, human")
+
+txt2imgpipeline.images
+# Generate Image via image to image
+init_image = imgs[2]
+img2imgpipeline = img2imgpipe(prompt= "a stuffed panda bear dressed in a zebra suit, cartoon, animated, modern disney style",
+                        image=init_image,
+                        strength=0.6,
+                        guidance_scale=20,
+                        num_inference_steps=400,
+                        num_images_per_prompt = 2,
+                        negative_prompt = "disfigured, misaligned, ugly, blurry, grumpy, grey, dark, big eyes, person, human")
+
+img2imgpipeline.images
+
+# Multiple rounds of image to image 
+returned_imgs = multiple_rounds_img2img(
+  init_image = imgs[5],
+  prompt = "a stuffed panda bear dressed in a zebra suit, modern disney style",
+  negative_prompt = "disfigured, misaligned, ugly, blurry, grumpy, grey, dark, big eyes, person, human, fuzzy, furry",
+  strength_array = [0.5, 0.4],
+  guidance_array = [20.0, 18.0],
+  final_images_to_return = 5,
+  num_rounds = 2)
+
+image_grid([imgs[5]] + returned_imgs, rows=2, cols = 3)
