@@ -12,7 +12,7 @@ The goal is to generate animated versions for the input images of toys.
 
 2. Explore inpainting and instruct pix2pix for background editing. Playground AI has a good example, illustrated [here](https://www.youtube.com/watch?v=-I9-2XK3kOs)
 
-3. Build API: Either with Flask or FASTAPI. Need to create a service that takes an input image and returns a range of transformed images via stable diffusion. Need to think about how to design this, do we send an image as a POST request? If so we need to implement task queues and streaming body responses. Or do we upload input images to a COS bucket with a namespace and save the model outputs to a different directory in the COS bucket? All APIs will require GPU support.
+3. Build API: Either with Flask or FASTAPI. Need to create a service that takes an input image and returns a range of transformed images via stable diffusion. Need to think about how to design this, do we send an image as a POST request? If so we need to implement task queues and streaming body responses. Or do we upload input images to a COS bucket with a namespace and save the model outputs to a different directory in the COS bucket? All APIs will require GPU support. Perhaps can explore Hugging Face's [Inference endpoints](https://huggingface.co/docs/inference-endpoints/index).
 
 4. Gradio app on Hugging face spaces as an alternative to an API?
 
