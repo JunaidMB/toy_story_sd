@@ -1,0 +1,16 @@
+torch>=1.4
+diffusers==0.10.2
+transformers
+scipy
+ftfy
+accelerate
+pyngrok==4.1.1
+flask_ngrok
+click==8.0.1
+flask
+itsdangerous==2.1.0
+Jinja2==3.0.3
+MarkupSafe==2.1.0
+Pillow==8.4.0
+Werkzeug==2.1.1
+
