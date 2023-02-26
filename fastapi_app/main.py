@@ -27,6 +27,16 @@ class Post(BaseModel):
 img2imgpipe = StableDiffusionImg2ImgPipeline.from_pretrained("nitrosocke/mo-di-diffusion", torch_dtype=torch.float16)
 img2imgpipe.to("cuda")
 
+# Convert Images to Byestring
+def img_to_bytestring(img: Image.Image) -> List[str]:
+  # Convert generated image to bytestring
+  buffered = io.BytesIO()
+  img.save(buffered, format = "PNG")
+  imgs_data = buffered.getvalue()
+  imgs_b64 = base64.b64encode(imgs_data).decode('utf-8')
+
+  return imgs_b64
+
 def multiple_rounds_img2img(
   init_image: Image,
   prompt: str,  
@@ -87,10 +97,8 @@ def multiple_rounds_img2img(
     return img2imgpipeline_final.images
   
 
-
-# Set flask app and set to ngrok
 @app.post("/generate_image_rest_direct")
-def generate_image_direct(payload: Post) -> Dict[str, str]:
+def generate_image_direct(payload: Post) -> Dict[str, List[str]]:
 
   # Load the image data into a PIL Image object
   image_data = base64.b64decode(payload.initial_image)
@@ -100,17 +108,13 @@ def generate_image_direct(payload: Post) -> Dict[str, str]:
   init_image = img,
   prompt = payload.prompt,
   negative_prompt = payload.negative_prompt,
-  strength_array = [0.7, 0.6],
-  guidance_array = [20.0, 18],
+  strength_array = [0.7, 0.6, 0.5, 0.4],
+  guidance_array = [20.0, 18.0, 16.0, 14.0],
   final_images_to_return = payload.final_images_to_return,
-  num_rounds = 2,
+  num_rounds = 4,
   seed = payload.seed)
 
   # Convert generated image to bytestring
-  buffered = io.BytesIO()
-  returned_imgs[0].save(buffered, format = "PNG")
-  returned_imgs_data = buffered.getvalue()
-  returned_imgs_b64 = base64.b64encode(returned_imgs_data).decode('utf-8')
+  generated_img_bytestring = [img_to_bytestring(img) for img in returned_imgs]
 
-  return {"generated_image": returned_imgs_b64}
-
+  return {"generated_images": generated_img_bytestring}
